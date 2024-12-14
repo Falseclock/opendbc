@@ -1180,6 +1180,7 @@ FW_VERSIONS = {
       b'\xf1\x00ON  MFC  AT USA LHD 1.00 1.00 99211-S9160 230303',
       b'\xf1\x00ON  MFC  AT USA LHD 1.00 1.01 99211-S9160 230802',
       b'\xf1\x00LX2 MFC  AT USA LHD 1.00 1.01 99211-S8600 230817',
+      b'\xf1\x00LX2 MFC  AT RUS LHD 1.00 1.04 99211-S8150 220622',
     ],
     (Ecu.fwdRadar, 0x7d0, None): [
       b'\xf1\x00LX2_ SCC -----      1.00 1.01 99110-S8150         ',
@@ -1188,6 +1189,7 @@ FW_VERSIONS = {
       b'\xf1\x00ON__ SCC FHCUP      1.00 1.01 99110-S9150         ',
       b'\xf1\x00ON__ SCC FHCUP      1.00 1.00 99110-S9160         ',
       b'\xf1\x00LX2 SCC FHCUP      1.00 1.00 99110-S8600         ',
+      b'\xf1\x00LX2_ SCC F-CUP      1.00 1.01 99110-S8150         ',
     ],
   },
 }
