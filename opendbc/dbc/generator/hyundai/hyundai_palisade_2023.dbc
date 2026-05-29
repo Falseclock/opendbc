@@ -945,14 +945,30 @@ VAL_ 1322 CF_Clu_Gear 1 "P" 2 "R" 4 "N" 8 "D";
 VAL_ 1342 Sign_detected 1 "Slow/Caution" 8 "Stop" 9 "Yield"
 
 BO_ 1260 CAM_TSR_State: 8 XXX
+ SG_ TSR_Byte0 : 0|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_Byte1 : 8|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_Byte2 : 16|8@1+ (1,0) [0|255] "" CLU
  SG_ TSR_Speed_Limit : 24|8@1+ (1,0) [0|255] "" XXX
+ SG_ TSR_State_LowNibble : 32|4@1+ (1,0) [0|15] "" CLU
  SG_ TSR_OverSpeedLimitWarn : 36|1@1+ (1,0) [0|1] "" CLU
  SG_ TSR_SpeedLimitChanged : 37|1@1+ (1,0) [0|1] "" CLU
+ SG_ TSR_State_HighBits : 38|2@1+ (1,0) [0|3] "" CLU
+ SG_ TSR_Byte5 : 40|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_Byte6 : 48|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_Byte7 : 56|8@1+ (1,0) [0|255] "" CLU
 
 CM_ BO_ 1260 "TSR state from the front camera on bus 2 of Palisade 2023. Empirically decoded by Falseclock (recordings 2026-05-28/29). Only byte 3 and two bits of byte 4 observed populated; bytes 0/1/2/5/6/7 are constant 0x00, no checksum or counter present.";
 CM_ SG_ 1260 TSR_Speed_Limit "Currently displayed TSR speed limit value, mirrors CF_Lkas_TsrSpeed_Display_Clu in BO_ 1342 LKAS12. Unit depends on camera/cluster country coding — observed as km/h on RU coding (values 20, 40, 60); on US/UK coding the same byte likely carries mph. The unit-selector bit is not yet identified (candidates: an unused bit in byte 4 of this message, or CF_Clu_SPEED_UNIT in CLU13 — to be verified with a recording on different coding).";
 CM_ SG_ 1260 TSR_OverSpeedLimitWarn "Byte4 bit4. Set by the camera to trigger the cluster over-speed audible alert; cleared after ~0.5 s. Verified 4/4 against driver-noted blink-only vs blink+beep moments. The cluster red-ring visual is independent (cluster-local, fires regardless of this bit).";
 CM_ SG_ 1260 TSR_SpeedLimitChanged "Byte4 bit5. Pulses for ~0.5 s at the exact moment the displayed limit (BO_ 1342 LKAS12) transitions to a new value. Fires whenever the camera adopts a new limit (either from its own sign recognition or after arbitration with 0x544 NAV input). Does NOT fire on every sign the camera sees of the same value.";
+CM_ SG_ 1260 TSR_State_LowNibble "Byte4 bits 0-3. Bits 0 and 1 observed set transiently together with bit4/bit5 (raw frames 0x01, 0x02, 0x11, 0x21, 0x22); bits 2 and 3 always 0 in observed data. Semantics unknown — preserved verbatim on retransmission so the cluster receives any state bits the camera might use.";
+CM_ SG_ 1260 TSR_State_HighBits "Byte4 bits 6-7. Always 0 in observed data; semantics unknown. Preserved verbatim on retransmission for forward-compatibility.";
+CM_ SG_ 1260 TSR_Byte0 "Byte 0. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
+CM_ SG_ 1260 TSR_Byte1 "Byte 1. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
+CM_ SG_ 1260 TSR_Byte2 "Byte 2. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
+CM_ SG_ 1260 TSR_Byte5 "Byte 5. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
+CM_ SG_ 1260 TSR_Byte6 "Byte 6. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
+CM_ SG_ 1260 TSR_Byte7 "Byte 7. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
 
 VAL_ 1260 TSR_OverSpeedLimitWarn 0 "OFF" 1 "ON";
 VAL_ 1260 TSR_SpeedLimitChanged 0 "no_change" 1 "value_changed";

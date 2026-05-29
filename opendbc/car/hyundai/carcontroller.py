@@ -67,6 +67,16 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
 
+    # TSR approaching-limit audible alert prototype (Palisade 2023 non-HDA2 only).
+    # Fires our own 2-second beep when cluster speed reaches (TSR_Speed_Limit - 2);
+    # native camera over-speed alert remains independent and fires later on real over-speed.
+    self.is_palisade_2023_non_hda2 = (CP.carFingerprint == CAR.HYUNDAI_PALISADE_2023
+                                      and bool(CP.flags & HyundaiFlags.CAN_CANFD_BLENDED))
+    self.tsr_approach_margin = 2     # km/h before TSR_Speed_Limit
+    self.tsr_beep_duration = 200     # frames; 100 Hz cycle → 2 seconds
+    self.tsr_in_approach_zone = False
+    self.tsr_beep_until_frame = 0
+
   def update(self, CC, CC_SP, CS, now_nanos):
     EsccCarController.update(self, CS)
     LeadDataCarController.update(self, CC_SP)
@@ -130,6 +140,29 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
 
     # Intelligent Cruise Button Management
     can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CS, CC_SP, self.packer, self.frame, self.last_button_frame, self.CAN))
+
+    # TSR approaching-limit prototype (Palisade 2023 non-HDA2).
+    # Panda's hyundai_fwd_hook blocks the camera's CAM_TSR_State (0x4EC) from
+    # reaching the cluster, so we re-emit a full byte-for-byte mirror of the
+    # camera's frame on bus 0 at 10 Hz (camera's native rate). The only modification
+    # is OR-ing the over-speed-warn bit (0x10) into byte 4 during our 2 s approach
+    # window at (cluster_speed >= limit - tsr_approach_margin). One-shot per entry —
+    # we rearm only after cluster_speed drops below the threshold and crosses again.
+    if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0:
+      limit = CS.displayed_speed_limit
+      if limit > 0:
+        in_zone = CS.cluster_speed >= (limit - self.tsr_approach_margin)
+        if in_zone and not self.tsr_in_approach_zone:
+          self.tsr_beep_until_frame = self.frame + self.tsr_beep_duration
+        self.tsr_in_approach_zone = in_zone
+      else:
+        self.tsr_in_approach_zone = False
+      our_warn = self.frame < self.tsr_beep_until_frame
+      # Full byte-for-byte mirror of camera's CAM_TSR_State; OR our bit into byte 4.
+      data = bytearray(CS.cam_tsr_raw)
+      if our_warn:
+        data[4] |= 0x10
+      can_sends.append((0x4EC, bytes(data), self.CAN.ECAN))
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX

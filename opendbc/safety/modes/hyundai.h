@@ -339,6 +339,7 @@ static safety_config hyundai_init(uint16_t param) {
   static const CanMsg HYUNDAI_CAN_CANFD_BLENDED_TX_MSGS[] = {
     HYUNDAI_COMMON_TX_MSGS(0, true)
     {0x364, 0, 8, .check_relay = true}, /* ALERTS_364*/ \
+    {0x4EC, 0, 8, .check_relay = true}, /* CAM_TSR_State Bus 0 — TSR over-speed alert gating (Palisade 2023 non-HDA2) */
   };
 
   static const CanMsg HYUNDAI_CAN_CANFD_BLENDED_LONG_TX_MSGS[] = {
@@ -543,10 +544,21 @@ static safety_config hyundai_legacy_init(uint16_t param) {
   return BUILD_SAFETY_CFG(hyundai_legacy_rx_checks, HYUNDAI_TX_MSGS);
 }
 
+static bool hyundai_fwd_hook(int bus_num, int addr) {
+  // Block the camera's CAM_TSR_State (0x4EC) from bus 2 → bus 0. openpilot
+  // reads the camera's frame, mirrors its content, and re-emits on bus 0 with
+  // the over-speed-warn bit OR'd by our own approach-zone decision. This gives
+  // a clean single-source channel to the cluster — no TX race.
+  // Only effective while the camera relay is OPEN (openpilot engaged); on
+  // disengagement the relay closes and the camera goes directly to the cluster.
+  return (bus_num == 2) && (addr == 0x4EC);
+}
+
 const safety_hooks hyundai_hooks = {
   .init = hyundai_init,
   .rx = hyundai_rx_hook,
   .tx = hyundai_tx_hook,
+  .fwd = hyundai_fwd_hook,
   .get_counter = hyundai_get_counter,
   .get_checksum = hyundai_get_checksum,
   .compute_checksum = hyundai_compute_checksum,

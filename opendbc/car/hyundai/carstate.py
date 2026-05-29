@@ -70,6 +70,13 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.cluster_speed = 0
     self.cluster_speed_counter = CLUSTER_SAMPLE_RATE
 
+    # TSR prototype state — populated for Palisade 2023 non-HDA2 only.
+    # `cam_tsr_raw` is an 8-byte mirror of the camera's CAM_TSR_State frame; the
+    # carcontroller re-emits this with only byte 4 bit 4 OR-ed by our approach-zone
+    # decision. All bytes 0-7 of the camera's frame are preserved verbatim.
+    self.displayed_speed_limit = 0
+    self.cam_tsr_raw = bytearray(8)
+
     self.params = CarControllerParams(CP)
 
   def recent_button_interaction(self) -> bool:
@@ -194,6 +201,32 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
 
     # save the entire LKAS11 and CLU11
     self.lkas11 = copy.copy(cp_cam.vl["LKAS11"])
+
+    # TSR prototype (Palisade 2023 non-HDA2 only).
+    # Panda blocks the camera's CAM_TSR_State (0x4EC) from reaching the cluster,
+    # so we re-emit a full byte-for-byte mirror of it on bus 0 (carcontroller TX).
+    # We capture:
+    #   displayed_speed_limit — TSR limit km/h (from LKAS12, used for our approach-zone math)
+    #   cam_tsr_raw[0..7]     — all 8 bytes of camera's CAM_TSR_State, preserved verbatim
+    if self.CP.carFingerprint == CAR.HYUNDAI_PALISADE_2023 and self.CP.flags & HyundaiFlags.CAN_CANFD_BLENDED:
+      self.displayed_speed_limit = cp_cam.vl["LKAS12"]["CF_Lkas_TsrSpeed_Display_Clu"]
+      cam = cp_cam.vl["CAM_TSR_State"]
+      # Mirror every byte of the camera's CAM_TSR_State frame so that any bits the
+      # cluster might rely on (including those whose semantics are unknown to us
+      # but observed as 0 in our recordings) are preserved verbatim on retransmission.
+      self.cam_tsr_raw[0] = int(cam["TSR_Byte0"])      & 0xFF
+      self.cam_tsr_raw[1] = int(cam["TSR_Byte1"])      & 0xFF
+      self.cam_tsr_raw[2] = int(cam["TSR_Byte2"])      & 0xFF
+      self.cam_tsr_raw[3] = int(cam["TSR_Speed_Limit"]) & 0xFF
+      self.cam_tsr_raw[4] = (
+        (int(cam["TSR_State_LowNibble"])      << 0) |
+        (int(cam["TSR_OverSpeedLimitWarn"])   << 4) |
+        (int(cam["TSR_SpeedLimitChanged"])    << 5) |
+        (int(cam["TSR_State_HighBits"])       << 6)
+      ) & 0xFF
+      self.cam_tsr_raw[5] = int(cam["TSR_Byte5"])      & 0xFF
+      self.cam_tsr_raw[6] = int(cam["TSR_Byte6"])      & 0xFF
+      self.cam_tsr_raw[7] = int(cam["TSR_Byte7"])      & 0xFF
     self.clu11 = copy.copy(cp.vl["CLU11"])
     self.steer_state = cp.vl["MDPS12"]["CF_Mdps_ToiActive"]  # 0 NOT ACTIVE, 1 ACTIVE
     prev_cruise_buttons = self.cruise_buttons[-1]
