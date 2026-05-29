@@ -134,8 +134,18 @@ def create_lkas11_can_canfd_blended(packer, frame, CP, apply_steer, steer_req,
 
   values = {s: lkas11[s] for s in lkas11_sigs}
 
-  values["CF_Lkas_LdwsLHWarning"] = left_lane_depart
-  values["CF_Lkas_LdwsRHWarning"] = right_lane_depart
+  # Palisade 2023 non-HDA2: panda blocks the camera's LKAS11 forward from bus 2 -> bus 0,
+  # so the cluster only sees the LKAS11 that openpilot emits here. openpilot's internal
+  # LDW (selfdrive/controls/lib/ldw.py) intentionally goes silent while lateral control
+  # is active, which would mute the camera's native lane-departure warning too. Pass
+  # through the camera's LDW value so the cluster keeps its LDW chime + lane overlay
+  # even when openpilot is engaged.
+  if CP.carFingerprint == CAR.HYUNDAI_PALISADE_2023 and CP.flags & HyundaiFlags.CAN_CANFD_BLENDED:
+    values["CF_Lkas_LdwsLHWarning"] = max(int(left_lane_depart), int(lkas11["CF_Lkas_LdwsLHWarning"]))
+    values["CF_Lkas_LdwsRHWarning"] = max(int(right_lane_depart), int(lkas11["CF_Lkas_LdwsRHWarning"]))
+  else:
+    values["CF_Lkas_LdwsLHWarning"] = left_lane_depart
+    values["CF_Lkas_LdwsRHWarning"] = right_lane_depart
   values["CR_Lkas_StrToqReq"] = apply_steer
   values["CF_Lkas_ActToi"] = steer_req
   values["CF_Lkas_ToiFlt"] = torque_fault  # seems to allow actuation on CR_Lkas_StrToqReq

@@ -281,12 +281,12 @@ BO_ 832 LKAS11: 8 XXX
  SG_ CF_Lkas_FcwOpt_USM : 32|3@1+ (1.0,0.0) [0.0|7.0] ""  CLU
  SG_ CF_Lkas_LdwsActivemode : 30|2@1+ (1,0) [0|3] "" CLU,IBOX,PSB
  SG_ CF_Lkas_LdwsLHWarning : 12|2@1+ (1.0,0.0) [0.0|3.0] ""  BCM,CLU,PSB
- SG_ CF_Lkas_LdwsRHWarning : 10|2@1+ (1.0,0.0) [0.0|3.0] ""  BCM,CLU,PSB
+ SG_ CF_Lkas_LdwsRHWarning : 14|2@1+ (1.0,0.0) [0.0|3.0] ""  BCM,CLU,PSB
  SG_ CF_Lkas_MsgCount : 36|4@1+ (1.0,0.0) [0.0|15.0] ""  CLU,MDPS
  SG_ CF_Lkas_ToiFlt : 28|1@1+ (1.0,0.0) [0.0|1.0] ""  MDPS
  SG_ CR_Lkas_StrToqReq : 16|11@1+ (1.0,-1024.0) [-1024.0|1024.0] ""  MDPS
  SG_ NEW_SIGNAL_1 : 8|2@1+ (1,0) [0|0] "" XXX
- SG_ NEW_SIGNAL_2 : 14|2@1+ (1,0) [0|0] "" XXX
+ SG_ NEW_SIGNAL_2 : 10|2@1+ (1,0) [0|0] "" XXX
  SG_ NEW_SIGNAL_3 : 29|1@0+ (1,0) [0|0] "" XXX
  SG_ NEW_SIGNAL_4 : 35|1@0+ (1,0) [0|0] "" XXX
  SG_ NEW_SIGNAL_5 : 40|8@1+ (1,0) [0|0] "" XXX
