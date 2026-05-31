@@ -994,3 +994,4 @@ CM_ SG_ 1260 TSR_Byte7 "Byte 7. Always 0x00 in observed data; semantics unknown.
 VAL_ 1260 TSR_OverSpeedLimitWarn 0 "OFF" 1 "ON";
 VAL_ 1260 TSR_SpeedLimitChanged 0 "no_change" 1 "value_changed";
 VAL_ 1260 TSR_SpeedLimitCondition 0 "UNCONDITIONAL" 1 "RAIN" 2 "SNOW" 3 "SLEET" 4 "TRAILER";
+
