@@ -759,8 +759,16 @@ BO_ 1342 LKAS12: 8 XXX
  SG_ COUNTER : 12|4@1+ (1,0) [0|0] "" XXX
  SG_ CF_SLA_Avail : 48|2@1+ (1,0) [0|3] "" XXX
  SG_ CF_SLA_AdjDisp : 51|2@1+ (1,0) [0|3] "" XXX
- SG_ Sign_detected : 56|5@1+ (1,0) [0|255] "" XXX
+ SG_ Sign_detected : 56|5@1+ (1,0) [0|31] "" XXX
  SG_ CF_SLA_ACT : 61|1@0+ (1,0) [0|1] "" XXX
+ SG_ CF_Lkas_SpdLimOffsetEnabled : 8|1@1+ (1,0) [0|1] "" CLU
+ SG_ CF_Lkas_SpdLimOffsetValue   : 43|3@1+ (1,0) [0|7] "" CLU
+ SG_ LKAS12_Byte1_Bit1 : 9|1@1+ (1,0) [0|1] "" XXX
+ SG_ LKAS12_Byte2 : 16|8@1+ (1,0) [0|255] "" XXX
+ SG_ LKAS12_Byte5_HighBits : 46|2@1+ (1,0) [0|3] "" XXX
+ SG_ LKAS12_Byte6_Bit2 : 50|1@1+ (1,0) [0|1] "" XXX
+ SG_ LKAS12_Byte6_HighBits : 53|3@1+ (1,0) [0|7] "" XXX
+ SG_ LKAS12_Byte7_HighBits : 62|2@1+ (1,0) [0|3] "" XXX
 
 BO_ 1345 CGW1: 8 XXX
  SG_ CF_Gway_ALightStat : 37|1@1+ (1,0) [0|0] "" XXX
@@ -927,6 +935,15 @@ CM_ SG_ 1348 SpeedLim_Nav_Clu "Speed limit displayed on Nav, Cluster and HUD";
 CM_ SG_ 1342 CF_SLA_ACT "Speed limit assist active flag";
 CM_ SG_ 1342 CF_SLA_AdjDisp "Display of the automatically adjusting speed message";
 CM_ SG_ 1342 CF_SLA_Avail "Up or Down arrow showing speed limit assist available";
+CM_ SG_ 1342 CF_Lkas_SpdLimOffsetValue "Speed-limit offset enum, 3-bit. 0=off, 1=-10 km/h | -5 mph, 2=-5 km/h | -3 mph, 3=0 km/h | 0 mph, 4=+5 km/h | +3 mph, 5=+10 km/h | +5 mph. MFC applies offset to base limit and publishes effective value in BO_ 1260 CAM_TSR_State.TSR_Speed_Limit. Same raw enum on wire — physical unit (km/h vs mph) resolved by HU per unit-display setting (Java DriverAsstUtils arrays ch/ci). Settable by user in HU menu when CF_Lkas_SpdLimOffsetEnabled=1.";
+CM_ SG_ 1342 CF_Lkas_SpdLimOffsetEnabled "Bit 8 of LKAS12. Observed 0 with RU camera coding (DID 0x0010 byte 0 = 0x09), 1 with KR coding (= 0x01). Always toggles together with CF_Lkas_SpdLimOffsetValue enum in same frame. Used by HU/USM to gate offset menu visibility in Vehicle Settings.";
+CM_ SG_ 1342 LKAS12_Byte1_Bit1 "Byte 1 bit 1. Gap between CF_Lkas_SpdLimOffsetEnabled and CF_Lkas_TsrSlifOpt. Observed 0 in our recordings; semantics unknown. Mirrored verbatim by carstate so carcontroller can preserve it on retransmission.";
+CM_ SG_ 1342 LKAS12_Byte2 "Byte 2 (all 8 bits). Observed 0x00 in our recordings; semantics unknown. Mirrored verbatim for forward-compatibility on retransmission.";
+CM_ SG_ 1342 LKAS12_Byte5_HighBits "Byte 5 bits 6-7. Observed 0 in our recordings; semantics unknown. Mirrored verbatim.";
+CM_ SG_ 1342 LKAS12_Byte6_Bit2 "Byte 6 bit 2. Gap between CF_SLA_Avail and CF_SLA_AdjDisp. Observed 0 in our recordings; semantics unknown. Mirrored verbatim.";
+CM_ SG_ 1342 LKAS12_Byte6_HighBits "Byte 6 bits 5-7. Observed 0 in our recordings; semantics unknown. Mirrored verbatim.";
+CM_ SG_ 1342 LKAS12_Byte7_HighBits "Byte 7 bits 6-7. Observed 0 in our recordings; semantics unknown. Mirrored verbatim.";
+CM_ SG_ 1342 Sign_detected "Byte 7 bits 0..4 of LKAS12. 5-bit enum reporting the type of road sign currently recognized by the camera (event-driven — non-zero only while a sign is visible). Bench-mapped 2026-05-31 by Falseclock injecting byte 7 values via CAN-Hacker and reading cluster icons. Verified field width is 5 bits because injected values 0x21, 0x41, 0x61 (and so on, with bits 5..7 set) decode identically to 0x01 — cluster masks input with 0x1F before lookup. Known mapping: 1=school zone (осторожно дети), 8=STOP, 9=YIELD (уступи дорогу), 16=no overtaking RHD, 17=no overtaking LHD, 19=no entry (кирпич), 24=roundabout RHD, 25=roundabout LHD, 26=sharp turn right, 27=sharp turn left, 28=dangerous curve right-first, 29=dangerous curve left-first. Values 2..7, 10..15, 18, 20..23, 30..31 not yet tested.";
 
 VAL_ 871 CF_Lvr_Gear 12 "T" 5 "D" 8 "S" 6 "N" 7 "R" 0 "P";
 VAL_ 871 AUTO_START_STOP_STATUS 3 "Off" 1 "On";
@@ -942,11 +959,14 @@ VAL_ 1157 LFA_SysWarning 0 "no_message" 1 "switching_to_hda" 2 "switching_to_scc
 VAL_ 1157 LFA_Icon_State 0 "no_wheel" 1 "white_wheel" 2 "green_wheel" 3 "green_wheel_blink";
 VAL_ 1157 HDA_SysWarning 0 "no_message" 1 "driving_convenience_systems_cancelled" 2 "highway_drive_assist_system_cancelled";
 VAL_ 1322 CF_Clu_Gear 1 "P" 2 "R" 4 "N" 8 "D";
-VAL_ 1342 Sign_detected 1 "Slow/Caution" 8 "Stop" 9 "Yield"
+VAL_ 1342 Sign_detected 1 "SCHOOL_ZONE" 8 "STOP" 9 "YIELD" 16 "NO_OVERTAKING_RHD" 17 "NO_OVERTAKING_LHD" 19 "NO_ENTRY" 24 "ROUNDABOUT_RHD" 25 "ROUNDABOUT_LHD" 26 "SHARP_TURN_RIGHT" 27 "SHARP_TURN_LEFT" 28 "DANGEROUS_CURVE_RIGHT_FIRST" 29 "DANGEROUS_CURVE_LEFT_FIRST";
+VAL_ 1342 CF_Lkas_SpdLimOffsetValue 0 "off" 1 "step_minus_2" 2 "step_minus_1" 3 "zero" 4 "step_plus_1" 5 "step_plus_2" 6 "default" 7 "invalid";
+VAL_ 1342 CF_Lkas_SpdLimOffsetEnabled 0 "OFF" 1 "ON";
 
 BO_ 1260 CAM_TSR_State: 8 XXX
  SG_ TSR_Byte0 : 0|8@1+ (1,0) [0|255] "" CLU
- SG_ TSR_Byte1 : 8|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_SpeedLimitCondition : 8|4@1+ (1,0) [0|15] "" CLU
+ SG_ TSR_Byte1_HighNibble : 12|4@1+ (1,0) [0|15] "" CLU
  SG_ TSR_Byte2 : 16|8@1+ (1,0) [0|255] "" CLU
  SG_ TSR_Speed_Limit : 24|8@1+ (1,0) [0|255] "" XXX
  SG_ TSR_State_LowNibble : 32|4@1+ (1,0) [0|15] "" CLU
@@ -957,18 +977,20 @@ BO_ 1260 CAM_TSR_State: 8 XXX
  SG_ TSR_Byte6 : 48|8@1+ (1,0) [0|255] "" CLU
  SG_ TSR_Byte7 : 56|8@1+ (1,0) [0|255] "" CLU
 
-CM_ BO_ 1260 "TSR state from the front camera on bus 2 of Palisade 2023. Empirically decoded by Falseclock (recordings 2026-05-28/29). Only byte 3 and two bits of byte 4 observed populated; bytes 0/1/2/5/6/7 are constant 0x00, no checksum or counter present.";
+CM_ BO_ 1260 "TSR state from the front camera on bus 2 of Palisade 2023. Empirically decoded by Falseclock (recordings 2026-05-28/29, bench bit-scan 2026-05-31). Populated fields: byte 1 (TSR_SpeedLimitCondition — when the limit applies: rain/snow/sleet/trailer; cluster keys off the low nibble), byte 3 (TSR_Speed_Limit display value in km/h), byte 4 bit 4 (TSR_OverSpeedLimitWarn — re-verified 2026-05-31 on the real route: chime moments coincide with this bit changing), byte 4 bit 5 (TSR_SpeedLimitChanged). Bytes 0/2/5/6/7 are 0x00 in real-car logs from RU-coded cars — semantics still unknown. Note: bench injections of byte 5 = 0x10 / 0x20 did produce audible cluster reactions, but on real-car cabana playback the chime tracks byte 4 bit 4 only — byte-5 bench reactions were likely race-condition artefacts from injecting alongside live camera frames.";
 CM_ SG_ 1260 TSR_Speed_Limit "Currently displayed TSR speed limit value, mirrors CF_Lkas_TsrSpeed_Display_Clu in BO_ 1342 LKAS12. Unit depends on camera/cluster country coding — observed as km/h on RU coding (values 20, 40, 60); on US/UK coding the same byte likely carries mph. The unit-selector bit is not yet identified (candidates: an unused bit in byte 4 of this message, or CF_Clu_SPEED_UNIT in CLU13 — to be verified with a recording on different coding).";
 CM_ SG_ 1260 TSR_OverSpeedLimitWarn "Byte4 bit4. Set by the camera to trigger the cluster over-speed audible alert; cleared after ~0.5 s. Verified 4/4 against driver-noted blink-only vs blink+beep moments. The cluster red-ring visual is independent (cluster-local, fires regardless of this bit).";
 CM_ SG_ 1260 TSR_SpeedLimitChanged "Byte4 bit5. Pulses for ~0.5 s at the exact moment the displayed limit (BO_ 1342 LKAS12) transitions to a new value. Fires whenever the camera adopts a new limit (either from its own sign recognition or after arbitration with 0x544 NAV input). Does NOT fire on every sign the camera sees of the same value.";
 CM_ SG_ 1260 TSR_State_LowNibble "Byte4 bits 0-3. Bits 0 and 1 observed set transiently together with bit4/bit5 (raw frames 0x01, 0x02, 0x11, 0x21, 0x22); bits 2 and 3 always 0 in observed data. Semantics unknown — preserved verbatim on retransmission so the cluster receives any state bits the camera might use.";
 CM_ SG_ 1260 TSR_State_HighBits "Byte4 bits 6-7. Always 0 in observed data; semantics unknown. Preserved verbatim on retransmission for forward-compatibility.";
 CM_ SG_ 1260 TSR_Byte0 "Byte 0. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
-CM_ SG_ 1260 TSR_Byte1 "Byte 1. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
+CM_ SG_ 1260 TSR_SpeedLimitCondition "Byte 1 low nibble. Conditional qualifier the camera attaches to the displayed speed limit — corresponds to a physical sub-plate seen below the round speed-limit sign on the road (e.g. a '50' sign with a rain-cloud sub-plate means 'limit 50 when raining'). The cluster renders a matching small icon under the speed-limit plate. Bench-mapped on Palisade 2023 (2026-05-31, Falseclock) by injecting values via CAN-Hacker FD-transmit and reading the cluster. Verified field width is 4 bits: tested values 0x_1..0x_4 with various high nibbles (0x01, 0x11, 0x21, 0x31, 0x41) all decode to the same condition — cluster keys off the low nibble only and ignores the high nibble for this field. Known mapping: 0=unconditional, 1=rain, 2=snow, 3=sleet (rain+snow), 4=trailer/towing. Values 5..F not yet tested. In our real-car recordings the value was always 0 on RU coding and 1 on KR coding, which only reflects what sub-plate signs the camera happened to see during those drives — the field IS active on any coding whenever such a sign appears on the road.";
+CM_ SG_ 1260 TSR_Byte1_HighNibble "Byte 1 high nibble. In real-car logs the value increments linearly 0..F and wraps (looks counter-like) but the purpose is unverified — could be frame sequence ID, animation index, or camera-internal state. What IS confirmed by bench injection 2026-05-31: this nibble does not affect the TSR_SpeedLimitCondition icon rendering (cluster masks input to low nibble for that field). Mirrored verbatim on retransmission.";
 CM_ SG_ 1260 TSR_Byte2 "Byte 2. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
-CM_ SG_ 1260 TSR_Byte5 "Byte 5. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
+CM_ SG_ 1260 TSR_Byte5 "Byte 5. Always 0x00 in real-car logs from RU coding (including drives with confirmed over-speed chimes — verified on the real route 2026-05-31: chime moments coincide with TSR_OverSpeedLimitWarn byte 4 bit 4 changing, byte 5 stays at 0). Semantics unknown. Bench injections of byte 5 values 0x10 and 0x20 did produce audible cluster reactions, but on real-car cabana playback the audible chime tracks byte 4 bit 4 — so the bench reactions were likely race-condition artefacts from injecting alongside live camera frames, not a real byte-5-driven signal. Mirrored verbatim on retransmission.";
 CM_ SG_ 1260 TSR_Byte6 "Byte 6. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
 CM_ SG_ 1260 TSR_Byte7 "Byte 7. Always 0x00 in observed data; semantics unknown. Mirrored verbatim on retransmission for forward-compatibility.";
 
 VAL_ 1260 TSR_OverSpeedLimitWarn 0 "OFF" 1 "ON";
 VAL_ 1260 TSR_SpeedLimitChanged 0 "no_change" 1 "value_changed";
+VAL_ 1260 TSR_SpeedLimitCondition 0 "UNCONDITIONAL" 1 "RAIN" 2 "SNOW" 3 "SLEET" 4 "TRAILER";

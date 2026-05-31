@@ -340,6 +340,7 @@ static safety_config hyundai_init(uint16_t param) {
     HYUNDAI_COMMON_TX_MSGS(0, true)
     {0x364, 0, 8, .check_relay = true}, /* ALERTS_364*/ \
     {0x4EC, 0, 8, .check_relay = true}, /* CAM_TSR_State Bus 0 — TSR over-speed alert gating (Palisade 2023 non-HDA2) */
+    {0x53E, 0, 8, .check_relay = true}, /* LKAS12 Bus 0 — SpdLimOffset injection (Palisade 2023 non-HDA2) */
   };
 
   static const CanMsg HYUNDAI_CAN_CANFD_BLENDED_LONG_TX_MSGS[] = {
@@ -545,13 +546,15 @@ static safety_config hyundai_legacy_init(uint16_t param) {
 }
 
 static bool hyundai_fwd_hook(int bus_num, int addr) {
-  // Block the camera's CAM_TSR_State (0x4EC) from bus 2 → bus 0. openpilot
-  // reads the camera's frame, mirrors its content, and re-emits on bus 0 with
-  // the over-speed-warn bit OR'd by our own approach-zone decision. This gives
-  // a clean single-source channel to the cluster — no TX race.
+  // Block the camera's CAM_TSR_State (0x4EC) and LKAS12 (0x53E) from bus 2 → bus 0.
+  // openpilot reads each camera frame, mirrors its content, and re-emits on bus 0:
+  //   0x4EC — currently passthrough (artificial chime injection disabled).
+  //   0x53E — modified: SpdLimOffsetEnabled=1, SpdLimOffsetValue=4 (+5 km/h), then
+  //           checksum recomputed. Lets the cluster apply its native +5 over-speed
+  //           threshold instead of us faking the alert bit.
   // Only effective while the camera relay is OPEN (openpilot engaged); on
   // disengagement the relay closes and the camera goes directly to the cluster.
-  return (bus_num == 2) && (addr == 0x4EC);
+  return (bus_num == 2) && ((addr == 0x4EC) || (addr == 0x53E));
 }
 
 const safety_hooks hyundai_hooks = {

@@ -74,8 +74,11 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     # `cam_tsr_raw` is an 8-byte mirror of the camera's CAM_TSR_State frame; the
     # carcontroller re-emits this with only byte 4 bit 4 OR-ed by our approach-zone
     # decision. All bytes 0-7 of the camera's frame are preserved verbatim.
+    # `lkas12_raw` is the same idea for LKAS12 (0x53E) — used by carcontroller to
+    # force CF_Lkas_SpdLimOffsetEnabled=1 and CF_Lkas_SpdLimOffsetValue=4 (+5 km/h).
     self.displayed_speed_limit = 0
     self.cam_tsr_raw = bytearray(8)
+    self.lkas12_raw = bytearray(8)
 
     self.params = CarControllerParams(CP)
 
@@ -215,7 +218,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       # cluster might rely on (including those whose semantics are unknown to us
       # but observed as 0 in our recordings) are preserved verbatim on retransmission.
       self.cam_tsr_raw[0] = int(cam["TSR_Byte0"])      & 0xFF
-      self.cam_tsr_raw[1] = int(cam["TSR_Byte1"])      & 0xFF
+      self.cam_tsr_raw[1] = (
+        (int(cam["TSR_SpeedLimitCondition"])  << 0) |
+        (int(cam["TSR_Byte1_HighNibble"])     << 4)
+      ) & 0xFF
       self.cam_tsr_raw[2] = int(cam["TSR_Byte2"])      & 0xFF
       self.cam_tsr_raw[3] = int(cam["TSR_Speed_Limit"]) & 0xFF
       self.cam_tsr_raw[4] = (
@@ -227,6 +233,41 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       self.cam_tsr_raw[5] = int(cam["TSR_Byte5"])      & 0xFF
       self.cam_tsr_raw[6] = int(cam["TSR_Byte6"])      & 0xFF
       self.cam_tsr_raw[7] = int(cam["TSR_Byte7"])      & 0xFF
+      # LKAS12 (0x53E) mirror — used by carcontroller to force SpdLimOffsetEnabled=1
+      # and SpdLimOffsetValue=4 (+5 km/h). Camera's checksum (byte 0) becomes invalid
+      # after our edits, so carcontroller recomputes it before TX. Every bit of the
+      # camera's LKAS12 frame is preserved verbatim, including bits whose semantics
+      # are unknown (LKAS12_Byte1_Bit1, LKAS12_Byte2, LKAS12_Byte5_HighBits,
+      # LKAS12_Byte6_Bit2, LKAS12_Byte6_HighBits, LKAS12_Byte7_HighBits) — they were
+      # observed 0 in our recordings but if cluster relies on any of them we want
+      # the camera's actual value forwarded, not silently zeroed.
+      lk = cp_cam.vl["LKAS12"]
+      self.lkas12_raw[0] = int(lk["CHECKSUM"]) & 0xFF
+      self.lkas12_raw[1] = (
+        (int(lk["CF_Lkas_SpdLimOffsetEnabled"]) << 0) |
+        (int(lk["LKAS12_Byte1_Bit1"])           << 1) |
+        (int(lk["CF_Lkas_TsrSlifOpt"])          << 2) |
+        (int(lk["COUNTER"])                     << 4)
+      ) & 0xFF
+      self.lkas12_raw[2] = int(lk["LKAS12_Byte2"]) & 0xFF
+      self.lkas12_raw[3] = int(lk["CF_Lkas_TsrSpeed_Display_Clu"])  & 0xFF
+      self.lkas12_raw[4] = int(lk["CF_LkasTsrSpeed_Display_Navi"])  & 0xFF
+      self.lkas12_raw[5] = (
+        (int(lk["CF_LkasDawStatus"])            << 0) |
+        (int(lk["CF_Lkas_SpdLimOffsetValue"])   << 3) |
+        (int(lk["LKAS12_Byte5_HighBits"])       << 6)
+      ) & 0xFF
+      self.lkas12_raw[6] = (
+        (int(lk["CF_SLA_Avail"])                << 0) |
+        (int(lk["LKAS12_Byte6_Bit2"])           << 2) |
+        (int(lk["CF_SLA_AdjDisp"])              << 3) |
+        (int(lk["LKAS12_Byte6_HighBits"])       << 5)
+      ) & 0xFF
+      self.lkas12_raw[7] = (
+        (int(lk["Sign_detected"])               << 0) |
+        (int(lk["CF_SLA_ACT"])                  << 5) |
+        (int(lk["LKAS12_Byte7_HighBits"])       << 6)
+      ) & 0xFF
     self.clu11 = copy.copy(cp.vl["CLU11"])
     self.steer_state = cp.vl["MDPS12"]["CF_Mdps_ToiActive"]  # 0 NOT ACTIVE, 1 ACTIVE
     prev_cruise_buttons = self.cruise_buttons[-1]

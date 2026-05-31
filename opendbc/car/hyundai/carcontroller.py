@@ -141,28 +141,45 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # Intelligent Cruise Button Management
     can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CS, CC_SP, self.packer, self.frame, self.last_button_frame, self.CAN))
 
-    # TSR approaching-limit prototype (Palisade 2023 non-HDA2).
-    # Panda's hyundai_fwd_hook blocks the camera's CAM_TSR_State (0x4EC) from
-    # reaching the cluster, so we re-emit a full byte-for-byte mirror of the
-    # camera's frame on bus 0 at 10 Hz (camera's native rate). The only modification
-    # is OR-ing the over-speed-warn bit (0x10) into byte 4 during our 2 s approach
-    # window at (cluster_speed >= limit - tsr_approach_margin). One-shot per entry —
-    # we rearm only after cluster_speed drops below the threshold and crosses again.
-    if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0:
-      limit = CS.displayed_speed_limit
-      if limit > 0:
-        in_zone = CS.cluster_speed >= (limit - self.tsr_approach_margin)
-        if in_zone and not self.tsr_in_approach_zone:
-          self.tsr_beep_until_frame = self.frame + self.tsr_beep_duration
-        self.tsr_in_approach_zone = in_zone
-      else:
-        self.tsr_in_approach_zone = False
-      our_warn = self.frame < self.tsr_beep_until_frame
-      # Full byte-for-byte mirror of camera's CAM_TSR_State; OR our bit into byte 4.
-      data = bytearray(CS.cam_tsr_raw)
-      if our_warn:
-        data[4] |= 0x10
-      can_sends.append((0x4EC, bytes(data), self.CAN.ECAN))
+    # TSR approaching-limit prototype (Palisade 2023 non-HDA2) — DISABLED 2026-05-31.
+    # Replaced by the LKAS12 SpdLimOffset injection below: instead of faking the
+    # cluster's over-speed bit ourselves, we tell the cluster (via LKAS12 byte 1/5)
+    # that the user has enabled a +5 km/h offset — the cluster then plays its own
+    # native over-speed chime when actual_speed > displayed_limit + 5. Cleaner: no
+    # fake events, just shift the cluster's existing threshold. If this approach
+    # does not produce the desired chime on the real car, uncomment this block and
+    # remove the LKAS12 injection below.
+    # if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0:
+    #   limit = CS.displayed_speed_limit
+    #   if limit > 0:
+    #     in_zone = CS.cluster_speed >= (limit - self.tsr_approach_margin)
+    #     if in_zone and not self.tsr_in_approach_zone:
+    #       self.tsr_beep_until_frame = self.frame + self.tsr_beep_duration
+    #     self.tsr_in_approach_zone = in_zone
+    #   else:
+    #     self.tsr_in_approach_zone = False
+    #   our_warn = self.frame < self.tsr_beep_until_frame
+    #   # Full byte-for-byte mirror of camera's CAM_TSR_State; OR our bit into byte 4.
+    #   data = bytearray(CS.cam_tsr_raw)
+    #   if our_warn:
+    #     data[4] |= 0x10
+    #   can_sends.append((0x4EC, bytes(data), self.CAN.ECAN))
+
+    # LKAS12 SpdLimOffset injection (Palisade 2023 non-HDA2).
+    # Panda's hyundai_fwd_hook blocks the camera's LKAS12 (0x53E) from bus 2 → bus 0
+    # so we re-emit a full byte-for-byte mirror at 10 Hz (camera's native rate) with
+    # two bits forced: SpdLimOffsetEnabled=1 (byte 1 bit 0) and SpdLimOffsetValue=4
+    # (= +5 km/h, byte 5 bits 3..5). Always on while Palisade port active. Byte 0
+    # CHECKSUM is recomputed because our edits invalidate camera's original.
+    if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0 and any(CS.lkas12_raw):
+      # any(...) gates startup: don't TX a zero-payload LKAS12 before the first
+      # camera frame has populated CS.lkas12_raw, which would feed garbage values
+      # for every other LKAS12 field (display speed, sign_detected, etc.) to the cluster.
+      data = bytearray(CS.lkas12_raw)
+      data[1] |= 0x01                          # CF_Lkas_SpdLimOffsetEnabled = 1
+      data[5] = (data[5] & ~0x38) | (4 << 3)   # CF_Lkas_SpdLimOffsetValue   = 4 (+5 km/h)
+      data[0] = hyundaican.hyundai_checksum(bytes(data[1:8]))
+      can_sends.append((0x53E, bytes(data), self.CAN.ECAN))
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
