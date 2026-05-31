@@ -190,6 +190,21 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
         data[3] = min(data[3] + 5, 0xFF)
       can_sends.append((0x4EC, bytes(data), self.CAN.ECAN))
 
+    # ATTEMPT 4 (active alongside ATTEMPT 3): inject ONLY CF_Lkas_SpdLimOffsetValue
+    # = 4 (= +5 km/h step) into LKAS12 byte 5 bits 3..5. CF_Lkas_SpdLimOffsetEnabled
+    # (byte 1 bit 0) is NOT touched — left at the camera's value (0 by default on
+    # RU coding). Test goal: does the cluster apply the offset when only Value is
+    # set (Enabled = 0)? If yes, cluster will display (base + 5) and trigger its
+    # native over-speed chime — without the side effects of ATTEMPT 2 (no HU offset
+    # menu, no UDS error on selection, no camera KR-flip). Other LKAS12 bytes are
+    # mirrored verbatim from camera; CHECKSUM (byte 0) is recomputed because our
+    # edit invalidates camera's original (CRC-8 J1850 over bytes 1..7).
+    if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0 and any(CS.lkas12_raw):
+      data = bytearray(CS.lkas12_raw)
+      data[5] = (data[5] & ~0x38) | (4 << 3)   # CF_Lkas_SpdLimOffsetValue = 4
+      data[0] = hyundaican.hyundai_checksum(bytes(data[1:8]))
+      can_sends.append((0x53E, bytes(data), self.CAN.ECAN))
+
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
     new_actuators.torqueOutputCan = apply_torque
