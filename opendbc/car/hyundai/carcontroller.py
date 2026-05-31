@@ -141,14 +141,11 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # Intelligent Cruise Button Management
     can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CS, CC_SP, self.packer, self.frame, self.last_button_frame, self.CAN))
 
-    # TSR approaching-limit prototype (Palisade 2023 non-HDA2) — DISABLED 2026-05-31.
-    # Replaced by the LKAS12 SpdLimOffset injection below: instead of faking the
-    # cluster's over-speed bit ourselves, we tell the cluster (via LKAS12 byte 1/5)
-    # that the user has enabled a +5 km/h offset — the cluster then plays its own
-    # native over-speed chime when actual_speed > displayed_limit + 5. Cleaner: no
-    # fake events, just shift the cluster's existing threshold. If this approach
-    # does not produce the desired chime on the real car, uncomment this block and
-    # remove the LKAS12 injection below.
+    # Earlier attempts (kept commented for revert):
+    #
+    # ATTEMPT 1: artificial chime via 0x4EC byte 4 bit 4 OR'd inside an approach zone.
+    # Disabled because cluster did not actually play the sound on real route, even
+    # though the bit pulsed.
     # if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0:
     #   limit = CS.displayed_speed_limit
     #   if limit > 0:
@@ -159,27 +156,39 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     #   else:
     #     self.tsr_in_approach_zone = False
     #   our_warn = self.frame < self.tsr_beep_until_frame
-    #   # Full byte-for-byte mirror of camera's CAM_TSR_State; OR our bit into byte 4.
     #   data = bytearray(CS.cam_tsr_raw)
     #   if our_warn:
     #     data[4] |= 0x10
     #   can_sends.append((0x4EC, bytes(data), self.CAN.ECAN))
+    #
+    # ATTEMPT 2: LKAS12 SpdLimOffset injection (forced Enabled=1, Value=4 = +5 km/h).
+    # On the real car this *did* make the HU show the offset menu with +5 selected
+    # by default — and also flipped the camera into KR-style sign recognition. But
+    # selecting offset in the menu errored ("vehicle not responding" — HU was trying
+    # to write coding back to camera via UDS and we don't reply), TSR_Speed_Limit
+    # displayed at the cluster did NOT shift by the offset (camera publishes the
+    # unchanged byte 3 because it doesn't know we faked the LKAS12 enable), and the
+    # OverSpeedLimitWarn bit pulsed without audible chime. So the cluster does not
+    # honor LKAS12 SpdLimOffset by itself — only the MFC does, when it sets it itself.
+    # if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0 and any(CS.lkas12_raw):
+    #   data = bytearray(CS.lkas12_raw)
+    #   data[1] |= 0x01                          # CF_Lkas_SpdLimOffsetEnabled = 1
+    #   data[5] = (data[5] & ~0x38) | (4 << 3)   # CF_Lkas_SpdLimOffsetValue   = 4 (+5 km/h)
+    #   data[0] = hyundaican.hyundai_checksum(bytes(data[1:8]))
+    #   can_sends.append((0x53E, bytes(data), self.CAN.ECAN))
 
-    # LKAS12 SpdLimOffset injection (Palisade 2023 non-HDA2).
-    # Panda's hyundai_fwd_hook blocks the camera's LKAS12 (0x53E) from bus 2 → bus 0
-    # so we re-emit a full byte-for-byte mirror at 10 Hz (camera's native rate) with
-    # two bits forced: SpdLimOffsetEnabled=1 (byte 1 bit 0) and SpdLimOffsetValue=4
-    # (= +5 km/h, byte 5 bits 3..5). Always on while Palisade port active. Byte 0
-    # CHECKSUM is recomputed because our edits invalidate camera's original.
-    if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0 and any(CS.lkas12_raw):
-      # any(...) gates startup: don't TX a zero-payload LKAS12 before the first
-      # camera frame has populated CS.lkas12_raw, which would feed garbage values
-      # for every other LKAS12 field (display speed, sign_detected, etc.) to the cluster.
-      data = bytearray(CS.lkas12_raw)
-      data[1] |= 0x01                          # CF_Lkas_SpdLimOffsetEnabled = 1
-      data[5] = (data[5] & ~0x38) | (4 << 3)   # CF_Lkas_SpdLimOffsetValue   = 4 (+5 km/h)
-      data[0] = hyundaican.hyundai_checksum(bytes(data[1:8]))
-      can_sends.append((0x53E, bytes(data), self.CAN.ECAN))
+    # ATTEMPT 3 (active): rewrite TSR_Speed_Limit in 0x4EC byte 3 directly.
+    # Panda's hyundai_fwd_hook blocks the camera's 0x4EC bus2→bus0 so we re-emit
+    # a full byte-for-byte mirror at 10 Hz with byte 3 (TSR_Speed_Limit) shifted
+    # by +5 km/h. The cluster will display the shifted value and use it natively
+    # for its own over-speed comparison — so the cluster's native over-speed chime
+    # fires when actual_speed > (camera_limit + 5). No fake bits, no LKAS12 lie,
+    # no UDS write expected from HU. byte 3 = 0 is preserved as 0 (no limit recognized).
+    if self.is_palisade_2023_non_hda2 and self.frame % 10 == 0 and any(CS.cam_tsr_raw):
+      data = bytearray(CS.cam_tsr_raw)
+      if data[3] > 0:
+        data[3] = min(data[3] + 5, 0xFF)
+      can_sends.append((0x4EC, bytes(data), self.CAN.ECAN))
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
