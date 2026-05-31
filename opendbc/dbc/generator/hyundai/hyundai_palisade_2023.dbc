@@ -762,7 +762,7 @@ BO_ 1342 LKAS12: 8 XXX
  SG_ Sign_detected : 56|5@1+ (1,0) [0|31] "" XXX
  SG_ CF_SLA_ACT : 61|1@0+ (1,0) [0|1] "" XXX
  SG_ CF_Lkas_SpdLimOffsetEnabled : 8|1@1+ (1,0) [0|1] "" CLU
- SG_ CF_Lkas_SpdLimOffsetValue   : 43|3@1+ (1,0) [0|7] "" CLU
+ SG_ CF_Lkas_SpdLimOffsetValue : 43|3@1+ (1,0) [0|7] "" CLU
  SG_ LKAS12_Byte1_Bit1 : 9|1@1+ (1,0) [0|1] "" XXX
  SG_ LKAS12_Byte2 : 16|8@1+ (1,0) [0|255] "" XXX
  SG_ LKAS12_Byte5_HighBits : 46|2@1+ (1,0) [0|3] "" XXX
