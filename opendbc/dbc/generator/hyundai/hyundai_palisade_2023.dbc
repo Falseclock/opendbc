@@ -678,6 +678,20 @@ BO_ 1186 FRT_RADAR11: 8 FCA
  SG_ BYTE6 : 48|8@1+ (1,0) [0|255] "" XXX
  SG_ BYTE7 : 56|8@1+ (1,0) [0|255] "" XXX
 
+BO_ 1260 CAM_TSR: 8 XXX
+ SG_ TSR_Byte0 : 0|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_SpeedLimitCondition : 8|4@1+ (1,0) [0|15] "" CLU
+ SG_ TSR_Byte1_HighNibble : 12|4@1+ (1,0) [0|15] "" CLU
+ SG_ TSR_Byte2 : 16|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_Speed_Limit : 24|8@1+ (1,0) [0|255] "" XXX
+ SG_ TSR_State_LowNibble : 32|4@1+ (1,0) [0|15] "" CLU
+ SG_ TSR_OverSpeedLimitWarn : 36|1@1+ (1,0) [0|1] "" CLU
+ SG_ TSR_SpeedLimitChanged : 37|1@1+ (1,0) [0|1] "" CLU
+ SG_ TSR_State_HighBits : 38|2@1+ (1,0) [0|3] "" CLU
+ SG_ TSR_Byte5 : 40|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_Byte6 : 48|8@1+ (1,0) [0|255] "" CLU
+ SG_ TSR_Byte7 : 56|8@1+ (1,0) [0|255] "" CLU
+
 BO_ 1265 CLU11: 4 XXX
  SG_ CF_Clu_AliveCnt1 : 28|4@1+ (1,0) [0|0] "" XXX
  SG_ CF_Clu_AmpInfo : 25|1@1+ (1,0) [0|0] "" XXX
@@ -751,16 +765,22 @@ BO_ 1322 CLU15: 8 XXX
  SG_ CF_Clu_VehicleSpeed2 : 48|8@1+ (1,0) [0|0] "" XXX
 
 BO_ 1342 LKAS12: 8 XXX
- SG_ CF_LkasDawStatus : 40|3@1+ (1,0) [0|0] "" XXX
- SG_ CF_LkasTsrSpeed_Display_Navi : 32|8@1+ (1,0) [0|0] "" XXX
- SG_ CF_Lkas_TsrSpeed_Display_Clu : 24|8@1+ (1,0) [0|0] "" XXX
- SG_ CF_Lkas_TsrSlifOpt : 10|2@1+ (1,0) [0|0] "" XXX
  SG_ CHECKSUM : 0|8@1+ (1,0) [0|0] "" XXX
+ SG_ CF_Lkas_CountryCode : 8|4@1+ (1,0) [0|15] "" CLU,HUD
  SG_ COUNTER : 12|4@1+ (1,0) [0|0] "" XXX
- SG_ CF_SLA_Avail : 48|2@1+ (1,0) [0|3] "" XXX
- SG_ CF_SLA_AdjDisp : 51|2@1+ (1,0) [0|3] "" XXX
- SG_ Sign_detected : 56|5@1+ (1,0) [0|255] "" XXX
- SG_ CF_SLA_ACT : 61|1@0+ (1,0) [0|1] "" XXX
+ SG_ CF_Lkas_Byte2 : 16|8@1+ (1,0) [0|255] "" XXX
+ SG_ CF_Lkas_TsrSpeed_Display_Clu : 24|8@1+ (1,0) [0|0] "" XXX
+ SG_ CF_Lkas_TsrSpeed_Display_Navi : 32|8@1+ (1,0) [0|0] "" XXX
+ SG_ CF_Lkas_DawStatus : 40|3@1+ (1,0) [0|0] "" XXX
+ SG_ CF_Lkas_SpeedLimitOffset : 43|3@1+ (1,0) [0|7] "" CLU
+ SG_ CF_Lkas_SpeedLimitWarn : 46|1@1+ (1,0) [0|1] "" CLU,HUD
+ SG_ CF_Lkas_SignProjection : 47|1@1+ (1,0) [0|1] "" CLU,HUD
+ SG_ CF_Lkas_SpeedSignAttention : 48|3@1+ (1,0) [0|7] "" CLU,HUD
+ SG_ CF_Lkas_IslaMessage : 51|3@1+ (1,0) [0|7] "" CLU
+ SG_ CF_Lkas_Byte6_Bit54_55 : 54|2@1+ (1,0) [0|3] "" XXX
+ SG_ CF_Lkas_SignDetected : 56|5@1+ (1,0) [0|255] "" XXX
+ SG_ CF_Lkas_SlaState : 61|1@0+ (1,0) [0|1] "" XXX
+ SG_ CF_Lkas_Byte7_Bit62_63 : 62|2@1+ (1,0) [0|3] "" XXX
 
 BO_ 1345 CGW1: 8 XXX
  SG_ CF_Gway_ALightStat : 37|1@1+ (1,0) [0|0] "" XXX
@@ -924,9 +944,19 @@ CM_ SG_ 1123 DRV_MODE_PRIMARY_STATUS "Indicates the current drive mode selected 
 CM_ SG_ 1123 DRV_MODE_SECONDARY_STATUS "Indicates a secondary status modifier, often used in combination with PRIMARY to disambiguate ECO vs Snow. Status-only.";
 CM_ SG_ 1123 DRV_MODE_EXT_IND "Drive mode extension indicator (e.g. Snow Mode flag). Status-only signal.";
 CM_ SG_ 1348 SpeedLim_Nav_Clu "Speed limit displayed on Nav, Cluster and HUD";
-CM_ SG_ 1342 CF_SLA_ACT "Speed limit assist active flag";
-CM_ SG_ 1342 CF_SLA_AdjDisp "Display of the automatically adjusting speed message";
-CM_ SG_ 1342 CF_SLA_Avail "Up or Down arrow showing speed limit assist available";
+CM_ SG_ 1342 CF_Lkas_SlaState "Byte 7 bit 5. Speed limit assist active flag. Likely requires live SLA/cruise context to take effect.";
+CM_ SG_ 1342 CF_Lkas_CountryCode "Byte 1 low nibble (high nibble is COUNTER). Camera country code — selects the national rendering style of the speed-limit plate AND the Sign_detected icon (same enum value draws a different variant per country; some signs render only under certain countries). Codes 6-15 draw no plate. Distinct from the nav-side displayCountry.";
+CM_ SG_ 1342 CF_Lkas_SpeedLimitOffset "Byte 5 bits 3-5. Speed-limit offset enum: 0=off, 1=-10 km/h | -5 mph, 2=-5 km/h | -3 mph, 3=0, 4=+5 km/h | +3 mph, 5=+10 km/h | +5 mph. MFC applies the offset to the base limit; the effective value appears in BO_1260 TSR_Speed_Limit. Enabled per country profile.";
+CM_ SG_ 1342 CF_Lkas_SpeedLimitWarn "Byte 5 bit 6. Recolors the TSR speed-limit plate digit RED (over-limit warning), together with the CF_Lkas_SpeedSignAttention blink. Direct flag, independent of actual speed. Distinct from the speedometer-digit red, which is cluster-local (real speed vs the 0x544 nav limit).";
+CM_ SG_ 1342 CF_Lkas_SignProjection "Byte 5 bit 7. Speed-limit sign on the projection display: 0=ON (shown), 1=OFF (removed from projection; the cluster still shows it).";
+CM_ SG_ 1342 CF_Lkas_SpeedSignAttention "Byte 6 bits 0-2. 3-bit sign indicator: 0/5/6/7=none, 1/4=blink (over-limit warning, paired with CF_Lkas_SpeedLimitWarn), 2=blink + down arrow, 3=blink + up arrow. Arrows are the ISLA adopt-limit prompt (down = recognized limit below cruise set-speed -> press to reduce; up = above -> raise). Appear only when assist mode is enabled.";
+CM_ SG_ 1342 CF_Lkas_IslaMessage "Byte 6 bits 3-5. 3-bit ISLA (Intelligent Speed Limit Assist) cluster message + icon enum. Values 0..4 produce visible cluster output; values 5..7 are suppressed. Display gated by byte 5 contents — active when byte 5 = 0x1A (CF_Lkas_DawStatus = 2 AND CF_Lkas_SpeedLimitOffset = 3). Wider than upstream CF_SLA_AdjDisp (51|2) — bit 53 belongs to this enum, not a separate signal.";
+CM_ SG_ 1342 CF_Lkas_SignDetected "Byte 7 bits 0-4. 5-bit enum: road sign type recognized by the camera (cluster masks input with 0x1F). Rendered icon style varies by CF_Lkas_CountryCode.";
+CM_ SG_ 1260 TSR_Speed_Limit "Byte 3. Currently displayed TSR speed limit value; mirrors CF_Lkas_TsrSpeed_Display_Clu in BO_ 1342 LKAS12. Unit depends on country coding — km/h on RU/EU coding (values 20, 40, 60, ...); on US/UK coding the same byte likely carries mph. The unit-selector bit is not yet identified.";
+CM_ SG_ 1260 TSR_OverSpeedLimitWarn "Byte 4 bit 4. Set by the camera to trigger the cluster over-speed audible alert; cleared after ~0.5 s. The cluster red-ring visual is independent (cluster-local, fires regardless of this bit).";
+CM_ SG_ 1260 TSR_SpeedLimitChanged "Byte 4 bit 5. Pulses for ~0.5 s at the exact moment the displayed limit (BO_ 1342 LKAS12) transitions to a new value. Fires whenever the camera adopts a new limit (either from its own sign recognition or after arbitration with 0x544 NAV input). Does NOT fire on every sign the camera sees of the same value.";
+CM_ SG_ 1260 TSR_SpeedLimitCondition "Byte 1 low nibble. Conditional qualifier the camera attaches to the displayed speed limit — corresponds to a physical sub-plate seen below the round speed-limit sign on the road (e.g. a '50' sign with a rain-cloud sub-plate means 'limit 50 when raining'). The cluster renders a matching small icon under the speed-limit plate. Field width is 4 bits — the cluster keys off the low nibble only and ignores the high nibble. Known mapping: 0=unconditional, 1=rain, 2=snow, 3=sleet (rain+snow), 4=trailer/towing. Values 5..F not exhaustively tested.";
+
 
 VAL_ 871 CF_Lvr_Gear 12 "T" 5 "D" 8 "S" 6 "N" 7 "R" 0 "P";
 VAL_ 871 AUTO_START_STOP_STATUS 3 "Off" 1 "On";
@@ -942,4 +972,13 @@ VAL_ 1157 LFA_SysWarning 0 "no_message" 1 "switching_to_hda" 2 "switching_to_scc
 VAL_ 1157 LFA_Icon_State 0 "no_wheel" 1 "white_wheel" 2 "green_wheel" 3 "green_wheel_blink";
 VAL_ 1157 HDA_SysWarning 0 "no_message" 1 "driving_convenience_systems_cancelled" 2 "highway_drive_assist_system_cancelled";
 VAL_ 1322 CF_Clu_Gear 1 "P" 2 "R" 4 "N" 8 "D";
-VAL_ 1342 Sign_detected 1 "Slow/Caution" 8 "Stop" 9 "Yield"
+VAL_ 1342 CF_Lkas_SignDetected 1 "SCHOOL_ZONE" 8 "STOP" 9 "YIELD" 16 "NO_OVERTAKING_RHD" 17 "NO_OVERTAKING_LHD" 19 "NO_ENTRY" 24 "ROUNDABOUT_RHD" 25 "ROUNDABOUT_LHD" 26 "SHARP_TURN_RIGHT" 27 "SHARP_TURN_LEFT" 28 "DANGEROUS_CURVE_RIGHT_FIRST" 29 "DANGEROUS_CURVE_LEFT_FIRST";
+VAL_ 1342 CF_Lkas_IslaMessage 0 "none" 1 "auto_adjusting_auto" 2 "speed_changed_auto" 3 "auto_adjusting_assist" 4 "speed_changed_assist" 5 "reserved" 6 "reserved" 7 "reserved";
+VAL_ 1342 CF_Lkas_CountryCode 0 "RU_EUR" 1 "KOR" 2 "CHN" 3 "USA" 4 "CAN" 5 "AUS";
+VAL_ 1342 CF_Lkas_SpeedLimitOffset 0 "off" 1 "step_minus_2" 2 "step_minus_1" 3 "zero" 4 "step_plus_1" 5 "step_plus_2" 6 "default" 7 "invalid";
+VAL_ 1342 CF_Lkas_SpeedLimitWarn 0 "Off" 1 "On";
+VAL_ 1342 CF_Lkas_SignProjection 0 "On" 1 "Off";
+VAL_ 1342 CF_Lkas_SpeedSignAttention 0 "none" 1 "blink_warn" 2 "assist_reduce_down" 3 "assist_raise_up" 4 "blink_warn" 5 "none" 6 "none" 7 "none";
+VAL_ 1260 TSR_OverSpeedLimitWarn 0 "Off" 1 "On";
+VAL_ 1260 TSR_SpeedLimitChanged 0 "no_change" 1 "changed";
+VAL_ 1260 TSR_SpeedLimitCondition 0 "UNCONDITIONAL" 1 "RAIN" 2 "SNOW" 3 "SLEET" 4 "TRAILER";
