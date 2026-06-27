@@ -339,6 +339,8 @@ static safety_config hyundai_init(uint16_t param) {
   static const CanMsg HYUNDAI_CAN_CANFD_BLENDED_TX_MSGS[] = {
     HYUNDAI_COMMON_TX_MSGS(0, true)
     {0x364, 0, 8, .check_relay = true}, /* ALERTS_364*/ \
+    {0x4EC, 0, 8, .check_relay = true}, /* CAM_TSR Bus 0 (Palisade 2023 non-HDA2 TSR over-speed corridor) */
+    {0x53E, 0, 8, .check_relay = true}, /* LKAS12 Bus 0 (Palisade 2023 non-HDA2 TSR over-speed corridor) */
   };
 
   static const CanMsg HYUNDAI_CAN_CANFD_BLENDED_LONG_TX_MSGS[] = {
@@ -543,10 +545,19 @@ static safety_config hyundai_legacy_init(uint16_t param) {
   return BUILD_SAFETY_CFG(hyundai_legacy_rx_checks, HYUNDAI_TX_MSGS);
 }
 
+// Block camera's CAM_TSR (0x4EC) and LKAS12 (0x53E) from bus 2 → bus 0 so the
+// cluster sees only our retransmitted frames (Palisade 2023 non-HDA2 TSR
+// over-speed corridor). Effective only while the camera relay is OPEN; on
+// disengagement the relay closes and the camera goes directly to the cluster.
+static bool hyundai_fwd_hook(int bus_num, int addr) {
+  return (bus_num == 2) && ((addr == 0x4EC) || (addr == 0x53E));
+}
+
 const safety_hooks hyundai_hooks = {
   .init = hyundai_init,
   .rx = hyundai_rx_hook,
   .tx = hyundai_tx_hook,
+  .fwd = hyundai_fwd_hook,
   .get_counter = hyundai_get_counter,
   .get_checksum = hyundai_get_checksum,
   .compute_checksum = hyundai_compute_checksum,

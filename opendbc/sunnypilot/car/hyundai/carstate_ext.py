@@ -9,7 +9,7 @@ from enum import StrEnum
 
 from opendbc.car import Bus, structs
 from opendbc.can.parser import CANParser
-from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.hyundai.values import CAR, HyundaiFlags
 from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP
 
 
@@ -19,6 +19,15 @@ class CarStateExt:
     self.CP_SP = CP_SP
 
     self.aBasis = 0.0
+
+    # Palisade 2023 non-HDA2 TSR over-speed corridor: raw 8-byte mirrors of the
+    # camera's CAM_TSR (0x4EC) and LKAS12 (0x53E) frames, plus the integer
+    # speed limit currently shown on the cluster (native unit — km/h or mph
+    # depending on coding). The carcontroller rebroadcasts both frames with our
+    # alarm-corridor bits overridden; everything else is preserved verbatim.
+    self.tsr_lkas12_raw = bytearray(8)
+    self.tsr_cam_tsr_raw = bytearray(8)
+    self.tsr_displayed_limit = 0
 
   def update_speed_limit(self, cp, cp_cam) -> float:
     speed_limit = 0
@@ -75,6 +84,59 @@ class CarStateExt:
         ret.stockAeb = aeb_warning and aeb_braking
 
     ret_sp.speedLimit = self.update_speed_limit(cp, cp_cam) * speed_conv
+
+    if self.CP.carFingerprint == CAR.HYUNDAI_PALISADE_2023 and self.CP.flags & HyundaiFlags.CAN_CANFD_BLENDED:
+      self._update_tsr_raw(cp_cam)
+
+  def _update_tsr_raw(self, cp_cam: CANParser) -> None:
+    # Reconstruct the 8 bytes of LKAS12 (0x53E) and CAM_TSR (0x4EC) from their
+    # decoded signals so the carcontroller can re-emit them with our override
+    # bits applied. All 64 bits of each frame are covered by the DBC, so the
+    # mirror is lossless.
+    lk = cp_cam.vl["LKAS12"]
+    self.tsr_displayed_limit = int(lk["CF_Lkas_TsrSpeed_Display_Clu"])
+    self.tsr_lkas12_raw[0] = int(lk["CHECKSUM"]) & 0xFF
+    self.tsr_lkas12_raw[1] = (
+      (int(lk["CF_Lkas_CountryCode"]) << 0) |
+      (int(lk["COUNTER"])             << 4)
+    ) & 0xFF
+    self.tsr_lkas12_raw[2] = int(lk["CF_Lkas_Byte2"]) & 0xFF
+    self.tsr_lkas12_raw[3] = int(lk["CF_Lkas_TsrSpeed_Display_Clu"]) & 0xFF
+    self.tsr_lkas12_raw[4] = int(lk["CF_Lkas_TsrSpeed_Display_Navi"]) & 0xFF
+    self.tsr_lkas12_raw[5] = (
+      (int(lk["CF_Lkas_DawStatus"])        << 0) |
+      (int(lk["CF_Lkas_SpeedLimitOffset"]) << 3) |
+      (int(lk["CF_Lkas_SpeedLimitWarn"])   << 6) |
+      (int(lk["CF_Lkas_SignProjection"])   << 7)
+    ) & 0xFF
+    self.tsr_lkas12_raw[6] = (
+      (int(lk["CF_Lkas_SpeedSignAttention"]) << 0) |
+      (int(lk["CF_Lkas_IslaMessage"])        << 3) |
+      (int(lk["CF_Lkas_Byte6_Bit54_55"])     << 6)
+    ) & 0xFF
+    self.tsr_lkas12_raw[7] = (
+      (int(lk["CF_Lkas_SignDetected"])    << 0) |
+      (int(lk["CF_Lkas_SlaState"])        << 5) |
+      (int(lk["CF_Lkas_Byte7_Bit62_63"])  << 6)
+    ) & 0xFF
+
+    cam = cp_cam.vl["CAM_TSR"]
+    self.tsr_cam_tsr_raw[0] = int(cam["TSR_Byte0"]) & 0xFF
+    self.tsr_cam_tsr_raw[1] = (
+      (int(cam["TSR_SpeedLimitCondition"]) << 0) |
+      (int(cam["TSR_Byte1_HighNibble"])    << 4)
+    ) & 0xFF
+    self.tsr_cam_tsr_raw[2] = int(cam["TSR_Byte2"]) & 0xFF
+    self.tsr_cam_tsr_raw[3] = int(cam["TSR_Speed_Limit"]) & 0xFF
+    self.tsr_cam_tsr_raw[4] = (
+      (int(cam["TSR_State_LowNibble"])    << 0) |
+      (int(cam["TSR_OverSpeedLimitWarn"]) << 4) |
+      (int(cam["TSR_SpeedLimitChanged"])  << 5) |
+      (int(cam["TSR_State_HighBits"])     << 6)
+    ) & 0xFF
+    self.tsr_cam_tsr_raw[5] = int(cam["TSR_Byte5"]) & 0xFF
+    self.tsr_cam_tsr_raw[6] = int(cam["TSR_Byte6"]) & 0xFF
+    self.tsr_cam_tsr_raw[7] = int(cam["TSR_Byte7"]) & 0xFF
 
   def update_canfd_ext(self, ret: structs.CarState, ret_sp: structs.CarStateSP, can_parsers: dict[StrEnum, CANParser],
                        speed_factor: float) -> None:

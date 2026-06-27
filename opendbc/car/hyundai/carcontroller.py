@@ -13,6 +13,7 @@ from opendbc.sunnypilot.car.hyundai.icbm import IntelligentCruiseButtonManagemen
 from opendbc.sunnypilot.car.hyundai.longitudinal.controller import LongitudinalController
 from opendbc.sunnypilot.car.hyundai.lead_data_ext import LeadDataCarController
 from opendbc.sunnypilot.car.hyundai.mads import MadsCarController
+from opendbc.sunnypilot.car.hyundai.tsr_overspeed_ext import TsrOverSpeedCarController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -73,6 +74,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
     self.cancel_counter = 0
+    self.tsr_overspeed = TsrOverSpeedCarController(CP, CP_SP)
 
   def update(self, CC, CC_SP, CS, now_nanos):
     EsccCarController.update(self, CS)
@@ -141,6 +143,10 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
 
     # Intelligent Cruise Button Management
     can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CS, CC_SP, self.packer, self.frame, self.last_button_frame, self.CAN))
+
+    # Palisade 2023 non-HDA2 TSR over-speed corridor (10 Hz mirror of camera's
+    # 0x4EC/0x53E with cluster alarm bits overridden by our state machine).
+    can_sends.extend(self.tsr_overspeed.update(self.frame, CS))
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
