@@ -5,6 +5,9 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 
+import math
+
+from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.hyundaican import hyundai_checksum
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
@@ -15,7 +18,7 @@ from opendbc.car.hyundai.values import CAR, HyundaiFlags
 #   4 = +5 km/h  | +3 mph   5 = +10 km/h | +5 mph
 MARGIN_KMH = {1: -10, 2: -5, 3: 0, 4: 5, 5: 10}
 MARGIN_MPH = {1: -5,  2: -3, 3: 0, 4: 3, 5: 5}
-DEFAULT_MARGIN_ENUM = 5
+DEFAULT_MARGIN_ENUM = 4
 
 # Phase timing in seconds since the over-speed condition latched. Cluster receives
 # the corridor bits at 10 Hz so phase boundaries land on a tick.
@@ -48,11 +51,18 @@ class TsrOverSpeedCarController:
     if not any(CS.tsr_lkas12_raw) or not any(CS.tsr_cam_tsr_raw):
       return []  # wait for first camera frame to land in carstate
 
-    cluster_speed = int(CS.cluster_speed)
+    # Compare against the true wheel-derived speed (vEgo) rather than the
+    # speedometer-biased cluster reading. Hyundai speedometers over-read real
+    # speed by ~5% per regulation, so basing the alarm on the cluster value
+    # would shift the effective margin with limit (more lenient in town,
+    # stricter on highway). Using vEgo keeps the real-world margin constant
+    # against the value the sign actually means. Ceil for stricter rounding.
+    speed_conv = CV.MS_TO_MPH if not CS.is_metric else CV.MS_TO_KPH
+    real_speed = math.ceil(CS.out.vEgo * speed_conv)
     limit = int(CS.tsr_displayed_limit)
     margin_table = MARGIN_MPH if not CS.is_metric else MARGIN_KMH
     margin = margin_table[DEFAULT_MARGIN_ENUM]
-    over = limit > 0 and cluster_speed > limit + margin
+    over = limit > 0 and real_speed > limit + margin
 
     if not over:
       self.over_start_frame = -1
