@@ -12,13 +12,20 @@ from opendbc.car.hyundai.hyundaican import hyundai_checksum
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
+# Live config comes from openpilot params (registered in params_keys.h, synced by sunnylink, editable
+# from the settings UIs). opendbc also runs standalone (tests, tools) where openpilot isn't importable —
+# there the defaults below apply, which reproduce the original hardcoded behavior (fixed +5 km/h, real
+# speed, chime on).
+try:
+  from openpilot.common.params import Params
+except ImportError:
+  Params = None
 
-# Margin enum mirrors CF_Lkas_SpeedLimitOffset (LKAS12 byte 5 bits 3-5):
-#   1 = -10 km/h | -5 mph   2 = -5 km/h | -3 mph   3 = 0
-#   4 = +5 km/h  | +3 mph   5 = +10 km/h | +5 mph
-MARGIN_KMH = {1: -10, 2: -5, 3: 0, 4: 5, 5: 10}
-MARGIN_MPH = {1: -5,  2: -3, 3: 0, 4: 3, 5: 5}
-DEFAULT_MARGIN_ENUM = 4
+# type: 0 off (stock camera behavior) | 1 fixed | 2 percentage; source: 0 real vEgo | 1 cluster speed
+CONFIG_DEFAULTS = {"type": 1, "source": 0, "kph": 5, "mph": 3, "pct": 5, "chime": 1}
+CONFIG_KEYS = {"type": "HkgTsrAlarmOffsetType", "source": "HkgTsrAlarmSource", "kph": "HkgTsrAlarmOffsetKph",
+               "mph": "HkgTsrAlarmOffsetMph", "pct": "HkgTsrAlarmOffsetPct", "chime": "HkgTsrAlarmChime"}
+CONFIG_REFRESH_FRAMES = 100  # re-read params at 1 Hz (100 Hz carcontroller) so changes apply mid-drive
 
 # Phase timing in seconds since the over-speed condition latched. Cluster receives
 # the corridor bits at 10 Hz so phase boundaries land on a tick.
@@ -44,25 +51,50 @@ class TsrOverSpeedCarController:
     # unbroken sequence regardless of source-frame jitter).
     self.lkas12_cnt = 0
 
+    self.params = Params() if (self.enabled and Params is not None) else None
+    self.config = dict(CONFIG_DEFAULTS)
+    self._refresh_config()
+
+  def _refresh_config(self):
+    if self.params is None:
+      return
+    for name, key in CONFIG_KEYS.items():
+      try:
+        self.config[name] = int(self.params.get(key, return_default=True))
+      except (TypeError, ValueError):
+        self.config[name] = CONFIG_DEFAULTS[name]
+
   def update(self, frame, CS):
     # Returns list of (addr, bytes, bus) tuples to extend can_sends with.
     if not self.enabled or frame % TX_PERIOD_FRAMES != 0:
       return []
+    if frame % CONFIG_REFRESH_FRAMES == 0:
+      self._refresh_config()
+    if self.config["type"] == 0:
+      # Off: openpilot doesn't own the corridor — the camera's stock frames pass through untouched.
+      self.over_start_frame = -1
+      return []
     if not any(CS.tsr_lkas12_raw) or not any(CS.tsr_cam_tsr_raw):
       return []  # wait for first camera frame to land in carstate
 
-    # Compare against the true wheel-derived speed (vEgo) rather than the
-    # speedometer-biased cluster reading. Hyundai speedometers over-read real
-    # speed by ~5% per regulation, so basing the alarm on the cluster value
-    # would shift the effective margin with limit (more lenient in town,
-    # stricter on highway). Using vEgo keeps the real-world margin constant
-    # against the value the sign actually means. Ceil for stricter rounding.
-    speed_conv = CV.MS_TO_MPH if not CS.is_metric else CV.MS_TO_KPH
-    real_speed = math.ceil(CS.out.vEgo * speed_conv)
+    # Baseline is configurable. Real speed (default) compares against true wheel-derived vEgo — Hyundai
+    # speedometers over-read ~5% by regulation, so the margin acts on real km/h regardless of speed.
+    # Cluster speed compares against the biased dial value the driver actually sees. Ceil for stricter
+    # rounding on the real baseline.
+    if self.config["source"] == 1:
+      speed = int(CS.cluster_speed)
+    else:
+      speed_conv = CV.MS_TO_MPH if not CS.is_metric else CV.MS_TO_KPH
+      speed = math.ceil(CS.out.vEgo * speed_conv)
     limit = int(CS.tsr_displayed_limit)
-    margin_table = MARGIN_MPH if not CS.is_metric else MARGIN_KMH
-    margin = margin_table[DEFAULT_MARGIN_ENUM]
-    over = limit > 0 and real_speed > limit + margin
+
+    # Threshold: fixed margin in the CAR's cluster unit (CF_Clu_SPEED_UNIT decides which param applies),
+    # or a percentage of the displayed limit.
+    if self.config["type"] == 2:
+      threshold = limit * (1.0 + self.config["pct"] / 100.0)
+    else:
+      threshold = limit + (self.config["kph"] if CS.is_metric else self.config["mph"])
+    over = limit > 0 and speed > threshold
 
     if not over:
       self.over_start_frame = -1
@@ -84,6 +116,8 @@ class TsrOverSpeedCarController:
         red, blink, chime = 1, 1, 1
       else:
         red = 1
+    if not self.config["chime"]:
+      chime = 0   # visual-only mode: red + blink phases run, the audible phase is muted
 
     return [
       self._build_lkas12(CS, red, blink),
